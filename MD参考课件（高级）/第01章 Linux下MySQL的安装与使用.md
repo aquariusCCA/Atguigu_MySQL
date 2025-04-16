@@ -2769,4 +2769,447 @@ FROM employees
 WHERE department_id = 10;
 ```
 
-# 7.
+# 7. sql_mode的合理设置
+## 7.1 介绍
+### 7.1.1 🔍 一、什麼是 `sql_mode`？
+
+`sql_mode` 是 MySQL 的一個系統變數，用來控制：
+
+- 資料輸入的驗證方式（例如輸入不合法的資料該不該報錯）
+- SQL 語法的容忍程度（例如 `GROUP BY` 是否允許隨意寫）
+
+可以透過調整 `sql_mode`，來讓 MySQL 的運作更嚴格或更寬鬆。
+
+---
+
+### 7.1.2 🧱 二、不同 MySQL 版本的預設 `sql_mode`
+
+| MySQL 版本 | 預設模式 | 說明 |
+|------------|----------|------|
+| MySQL 5.6  | `NO_ENGINE_SUBSTITUTION` | 寬鬆模式，不會對資料進行嚴格限制 |
+| MySQL 5.7+ | `STRICT_TRANS_TABLES` 等 | 嚴格模式，對資料驗證更嚴格 |
+
+---
+
+### 7.1.3 📘 三、常見的 sql_mode 值解釋
+
+| 模式名稱              | 說明 |
+|----------------------|------|
+| `STRICT_TRANS_TABLES` | 嚴格模式，針對 **支援交易的表格**，當資料不合法時會報錯並回滾 |
+| `NO_ZERO_IN_DATE`     | 不允許日期中出現「00」作為月或日 |
+| `NO_ZERO_DATE`        | 不允許 `0000-00-00` 這種日期被插入 |
+| `ONLY_FULL_GROUP_BY`  | `GROUP BY` 中未出現的欄位不可在 `SELECT` 使用 |
+| `NO_ENGINE_SUBSTITUTION` | 如果指定的儲存引擎不可用，報錯而不是自動轉成預設引擎 |
+
+---
+
+### 7.1.4 ✅ 四、用範例說明差異
+
+#### ⚠ 寬鬆模式（如 MySQL 5.6）
+
+```sql
+SET sql_mode = '';
+CREATE TABLE test (
+  id INT,
+  price DECIMAL(5,2)
+);
+
+-- 插入不合法資料
+INSERT INTO test VALUES (1, 123456.78);
+-- ✅ 在寬鬆模式下，這條語句會被截斷為 999.99 插入，不會報錯
+```
+
+#### ❌ 嚴格模式（如 MySQL 5.7）
+
+```sql
+SET sql_mode = 'STRICT_TRANS_TABLES';
+INSERT INTO test VALUES (2, 123456.78);
+-- ❌ 在嚴格模式下，這條語句會報錯：
+-- ERROR 1264 (22003): Out of range value for column 'price'
+```
+
+#### ⛔ 日期驗證例子（NO_ZERO_DATE）
+
+```sql
+SET sql_mode = 'NO_ZERO_DATE';
+INSERT INTO test_date VALUES ('0000-00-00');
+-- ❌ 報錯：Invalid default value for 'date_column'
+```
+
+---
+
+### 7.1.5 🛠 五、怎麼查看與設定 `sql_mode`？
+
+#### 查看目前模式：
+
+```sql
+SELECT @@sql_mode;
+```
+
+#### 修改模式（只對目前連線有效）：
+
+```sql
+SET sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE';
+```
+
+#### 修改配置檔（永久設定）：
+修改 `my.cnf` 或 `my.ini` 中加入：
+
+```ini
+[mysqld]
+sql_mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE
+```
+
+---
+
+### 7.1.6 🧠 小結
+
+- 如果你是開發或測試環境，**寬鬆模式方便快速測試**；
+- 如果你是正式環境，**建議啟用嚴格模式**來保障資料的正確性；
+- 設定正確的 `sql_mode` 是避免不合法資料混入資料庫的重要手段。
+
+---
+
+## 7.2 宽松模式 vs 严格模式
+這段內容主要在說明 **MySQL 中的 `sql_mode` 合理設定**，以及為什麼「**寬鬆模式**」和「**嚴格模式**」會影響資料的驗證與資料遷移的可靠性。
+
+---
+
+### 7.2.1 🔹 一、寬鬆模式（寬容、不報錯）
+
+#### 📖 解釋：
+
+當 `sql_mode` 是空字串（或沒有 `STRICT_` 開頭的模式），這代表 MySQL 採用寬鬆模式。這種模式下，即使資料格式或長度**不完全符合資料表的設計規範**，MySQL 通常會**自動截斷或轉換**，**不報錯也不回滾**。
+
+#### 📌 範例：
+
+```sql
+SET sql_mode = ''; -- 設定為寬鬆模式
+
+CREATE TABLE demo (
+  name CHAR(10)
+);
+
+INSERT INTO demo VALUES ('1234567890abc');
+-- ✅ 成功插入：實際被截斷為 '1234567890'
+```
+
+#### ✅ 優點：
+
+- 在系統資料遷移時（例如從 Oracle → MySQL），如果一些資料過長或格式有誤，不會造成中斷；
+- 方便在開發早期快速測試資料。
+
+#### ❌ 缺點：
+
+- 資料容易「**靜悄悄地出錯**」，因為錯誤資料會被自動轉換、截斷而沒人發現；
+- 不適合正式環境，會造成資料不一致或不完整。
+
+---
+
+### 7.2.2 🔸 二、嚴格模式（推薦用於開發與生產）
+
+#### 📖 解釋：
+
+從 MySQL 5.7 開始，預設啟用 `STRICT_TRANS_TABLES` 模式，也就是嚴格模式。在這個模式下，如果插入的資料不符合欄位設定（如長度、類型、空值等），會**直接報錯、拒絕寫入**，並且**在交易表格中會回滾整個交易**。
+
+#### 📌 範例：
+
+```sql
+SET sql_mode = 'STRICT_TRANS_TABLES';
+
+CREATE TABLE demo (
+  name CHAR(10)
+);
+
+INSERT INTO demo VALUES ('1234567890abc');
+-- ❌ 報錯：
+-- ERROR 1406 (22001): Data too long for column 'name'
+```
+
+#### ✅ 優點：
+
+- 嚴格控管資料格式，防止錯誤資料寫入；
+- 開發階段就能提早發現資料錯誤；
+- 提升未來跨資料庫系統遷移的準備度。
+
+#### ❌ 缺點：
+
+- 如果系統本來依賴寬鬆行為，可能需要修改部分 SQL 或程式邏輯；
+- 對新手開發者而言，錯誤訊息較多。
+
+---
+
+### 7.2.3 🛠 三、常見嚴格模式錯誤例子
+
+#### ❌ `NO_ZERO_DATE`：不允許零日期
+
+```sql
+SET sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_DATE';
+
+CREATE TABLE log (
+  created_at DATE
+);
+
+INSERT INTO log VALUES ('0000-00-00');
+-- ❌ 錯誤：
+-- ERROR 1292 (22007): Incorrect date value: '0000-00-00'
+```
+
+#### ✅ 修正方法：
+
+- 使用 `NULL` 或明確有效日期：
+```sql
+INSERT INTO log VALUES (NULL);        -- OK
+INSERT INTO log VALUES ('2025-01-01'); -- OK
+```
+
+---
+
+### 7.2.4 🧠 四、開發實務建議
+
+| 環境     | sql_mode 建議                             |
+|----------|-------------------------------------------|
+| 測試 / 開發 | 嚴格模式 `STRICT_TRANS_TABLES` 等         |
+| 生產     | 同上，並搭配 `NO_ZERO_DATE`, `ONLY_FULL_GROUP_BY` 等強檢查 |
+| 遷移     | 初期可用寬鬆模式，確保資料流暢移動，再逐步嚴格化設定 |
+
+> 🚨 **重要觀念**：資料驗證最好 **在程式層做一次 + DB 層做一次**，前端/後端驗證雖然麻煩，但可提早發現問題，MySQL 嚴格模式作為**最後防線**。
+
+---
+
+#### ✅ 補充：如何永久設定 sql_mode？
+
+在 MySQL 配置檔（如 `my.cnf` 或 `my.ini`）加上：
+
+```ini
+[mysqld]
+sql_mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION
+```
+
+---
+
+## 7.3 模式查看和设置
+> 這段內容主要介紹了 **如何檢查、臨時設置與永久配置 MySQL 中的 `sql_mode`**，讓你能夠根據實際情況（如測試、開發、線上環境）調整 MySQL 的行為模式。下面我會一段一段說明，並搭配範例幫你理解整體用途和差異：
+
+---
+
+### 7.3.1 🔍 一、如何查看當前的 `sql_mode`
+
+你可以透過以下 SQL 語句查詢目前的設定：
+
+```sql
+-- 查詢目前這個連線（session）的 sql_mode
+SELECT @@SESSION.sql_mode;
+
+-- 查詢全局（global）的 sql_mode（所有新連線會套用）
+SELECT @@GLOBAL.sql_mode;
+
+-- 通用方式查看變數
+SHOW VARIABLES LIKE 'sql_mode';
+```
+
+#### ✅ 範例說明：
+
+假設你執行：
+
+```sql
+SELECT @@SESSION.sql_mode;
+```
+
+可能會看到結果：
+
+```
+STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION
+```
+
+這代表你目前這個連線會用這些「模式」進行 SQL 執行與資料校驗。
+
+---
+
+### 7.3.2 ⚙️ 二、臨時設定 `sql_mode`
+
+#### 📌 用途：
+
+- 用於 **短期調整**（如測試某段 SQL 在不同模式下會怎麼反應）
+- **不會改變其他使用者或其他連線的行為**
+- 重啟 MySQL 後就會 **失效**
+
+#### 🧪 範例：
+
+```sql
+-- ✅ 僅針對目前這條連線生效
+SET SESSION sql_mode='STRICT_TRANS_TABLES';
+
+-- ✅ 改變全局（但重啟後失效），適用於目前 MySQL 執行階段
+SET GLOBAL sql_mode='STRICT_TRANS_TABLES';
+```
+
+🔔 **注意：要改 GLOBAL 模式，你需要擁有 SUPER 或 SYSTEM_VARIABLES_ADMIN 權限**
+
+---
+
+### 7.3.3 🧾 三、永久設定 `sql_mode`（推薦正式環境使用）
+
+#### 📌 方法：
+
+編輯 MySQL 設定檔 `my.cnf`（Linux/macOS）或 `my.ini`（Windows），增加：
+
+```ini
+[mysqld]
+sql_mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+```
+
+然後重啟 MySQL 服務即可生效。
+
+```shell
+sudo systemctl restart mysqld
+```
+
+#### ❗ 注意：
+
+- 這種方式屬於「**永久有效**」
+- 不過，在**線上生產環境**中禁止隨意重啟資料庫，因此可以：
+  - 先用 `SET GLOBAL ...` 臨時設定立即生效
+  - 再修改 `my.cnf`，等下次維護重啟時永久套用
+
+---
+
+### 7.3.4 📘 模式說明（你範例中的幾個 mode）
+
+| 模式名稱 | 說明 |
+|----------|------|
+| `STRICT_TRANS_TABLES` | 嚴格模式，防止錯誤資料寫入 |
+| `NO_ZERO_IN_DATE` | 不允許 `2025-00-01` 這類不完整的日期 |
+| `NO_ZERO_DATE` | 不允許 `0000-00-00` 這種無效日期 |
+| `ONLY_FULL_GROUP_BY` | `GROUP BY` 查詢時要求欄位必須符合 SQL 標準 |
+| `ERROR_FOR_DIVISION_BY_ZERO` | 0 做除數會報錯（預設是警告） |
+| `NO_ENGINE_SUBSTITUTION` | 若指定儲存引擎不可用，直接報錯，不使用替代引擎 |
+
+---
+
+### 7.3.5 🎯 小結對照表
+
+| 類型     | 設定方式 | 是否永久 | 適用情境 |
+|----------|-----------|-----------|------------|
+| 臨時（會話） | `SET SESSION ...` | ❌ | 某人短期測試用 |
+| 臨時（全域） | `SET GLOBAL ...` | ❌ | 緊急調整、臨時維運 |
+| 永久       | 修改 `my.cnf` 後重啟 | ✅ | 正式/穩定環境部署 |
+
+---
+
+### 7.3.6 🧪 延伸練習範例
+
+```sql
+-- 練習設成寬鬆模式
+SET SESSION sql_mode='';
+
+CREATE TABLE demo (
+  name CHAR(5)
+);
+
+INSERT INTO demo VALUES ('abcdef');  -- ✅ 寬鬆模式會截斷為 'abcde'
+
+-- 改回嚴格模式
+SET SESSION sql_mode='STRICT_TRANS_TABLES';
+
+INSERT INTO demo VALUES ('abcdef');  -- ❌ 嚴格模式會報錯：Data too long
+```
+
+---
+
+## 📘 7.4 sql_mode 常用值
+
+> MySQL 提供了多種 SQL 模式來控制資料驗證、錯誤處理、語法規範等行為。以下是最常用、實務上最重要的三種模式：
+
+---
+
+### 7.5.1 ① `STRICT_TRANS_TABLES`（嚴格交易表模式）
+
+#### ✅ 說明：
+
+當插入的資料不符合欄位定義時（例如超過字元長度、NULL 約束等），系統會：
+
+- 對於**支援交易的表**（如 InnoDB）：**直接報錯**並且**回滾整筆交易**
+- 對於**非交易表**（如 MyISAM）：可能只報警告
+
+#### 🧪 範例：
+
+```sql
+SET SESSION sql_mode='STRICT_TRANS_TABLES';
+
+CREATE TABLE test1 (
+  name CHAR(5)
+);
+
+INSERT INTO test1 VALUES ('abcdef');  
+-- ❌ 報錯：Data too long for column 'name'
+```
+
+#### ✅ 適用場景：
+- **正式環境必備**
+- 防止不合法資料悄悄進入資料庫
+- 開發階段能及早發現問題
+
+---
+
+### 7.5.2 ② `NO_ZERO_DATE`（禁止零日期）
+
+#### ✅ 說明：
+
+禁止插入 `0000-00-00` 這種不合法的日期，會直接報錯（而不是發出警告）。
+
+#### 🧪 範例：
+
+```sql
+SET SESSION sql_mode='NO_ZERO_DATE';
+
+CREATE TABLE test2 (
+  created_date DATE
+);
+
+INSERT INTO test2 VALUES ('0000-00-00');
+-- ❌ 報錯：Incorrect date value: '0000-00-00'
+```
+
+#### ✅ 適用場景：
+- 日期型資料需符合嚴格標準
+- 避免錯誤或預設時間值混入系統資料
+
+---
+
+### 7.5.3 ③ `ONLY_FULL_GROUP_BY`（全欄位分組）
+
+#### ✅ 說明：
+
+要求所有非聚合欄位必須在 `GROUP BY` 中出現。這是為了符合 SQL 標準。
+
+#### 🧪 範例：
+
+```sql
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY';
+
+CREATE TABLE test3 (
+  id INT,
+  name VARCHAR(20)
+);
+
+-- 這裡僅 GROUP BY id，name 欄位沒有聚合或出現在 GROUP BY 中
+SELECT id, name FROM test3 GROUP BY id;
+-- ❌ 報錯：is not functionally dependent on columns in GROUP BY
+```
+
+#### ✅ 適用場景：
+- 跨資料庫遷移（如從 PostgreSQL、Oracle 到 MySQL）
+- 需要高度符合 SQL 標準的查詢環境
+
+---
+
+### 7.5.4 🧠 小結比較表：
+
+| 模式名稱 | 功能重點 | 常見錯誤範例 | 適用環境 |
+|----------|----------|--------------|-----------|
+| `STRICT_TRANS_TABLES` | 嚴格資料驗證 | 插入超長資料 | 開發、測試、生產 |
+| `NO_ZERO_DATE` | 禁止無效日期 | 插入 `0000-00-00` | 生產資料精度要求 |
+| `ONLY_FULL_GROUP_BY` | 分組欄位嚴格規範 | 聚合查詢錯誤 | 高一致性需求環境 |
+
+---
