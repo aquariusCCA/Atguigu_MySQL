@@ -2465,3 +2465,308 @@ SET character_set_results = utf8mb4;
 ---
 
 # 6. SQL大小写规范
+## 6.1 Windows和Linux平台区别
+這段關於 MySQL 大小寫敏感性的說明其實關係到兩個層面：
+
+1. **SQL 語法本身（邏輯層）**
+2. **MySQL 實際儲存與查找資料（物理層）**
+
+---
+
+### ✅ 一、SQL 語法層級：大小寫規則
+
+#### ✳️ **不區分大小寫的部分（不論系統）**
+- **SQL 關鍵字**：如 `SELECT`、`FROM`、`WHERE`、`ORDER BY`
+- **函數名稱**：如 `MAX()`、`ABS()`、`MOD()`、`ROUND()`
+
+```sql
+-- 以下三種寫法是等價的
+SELECT MAX(salary) FROM employees;
+select max(salary) from employees;
+SeLeCt MaX(salary) From employees;
+```
+
+---
+
+### ✅ 二、MySQL 物理層級（和作業系統有關）
+
+#### 🔍 透過此指令查詢 MySQL 對表名大小寫是否敏感：
+```sql
+SHOW VARIABLES LIKE '%lower_case_table_names%';
+```
+
+---
+
+### 🖥 Windows 系統下：
+
+- 預設 `lower_case_table_names = 1`
+- 👉 所有 **資料表與資料庫名稱** 都轉為小寫儲存與查找
+- 👉 **不區分大小寫**
+
+```sql
+-- 以下兩個指令在 Windows 上都可以成功
+SELECT * FROM EMPLOYEES;
+SELECT * FROM employees;
+```
+
+---
+
+### 🐧 Linux 系統下：
+
+- 預設 `lower_case_table_names = 0`
+- 👉 資料表與資料庫名稱 **大小寫敏感**
+- 👉 表名或資料庫名要完全對應
+
+```sql
+-- 假設建立的表為 EMPLOYEES，大寫
+CREATE TABLE EMPLOYEES (id INT);
+
+-- 以下指令在 Linux 上會出錯（找不到小寫的 employees）
+SELECT * FROM employees;  -- ❌
+
+-- 必須這樣寫
+SELECT * FROM EMPLOYEES;  -- ✅
+```
+
+---
+
+### 🔧 lower_case_table_names 的三種設定
+
+| 值 | 說明 |
+|----|------|
+| 0  | 默认为0，大小写敏感 |
+| 1  | 设置1，大小写不敏感。创建的表，数据库都是以小写形式存放在磁盘上，对于sql语句都是转换为小写对表和数据库进行查找 |
+| 2  | 设置2，创建的表和数据库依据语句上格式存放，凡是查找都是转换为小写进行 |
+
+---
+
+### ✅ Linux 與 Windows 大小寫規則比較總表
+
+| 項目 | Linux | Windows |
+|------|--------|---------|
+| 資料庫名 | 敏感 | 不敏感 |
+| 資料表名 | 敏感 | 不敏感 |
+| 列名 / 欄位名 | 不敏感 | 不敏感 |
+| 別名 | 敏感（表別名）<br>不敏感（欄位別名） | 不敏感 |
+| 關鍵字 / 函數名 | 不敏感 | 不敏感 |
+
+---
+
+### 📌 建議
+
+為了跨平台兼容性（開發在 Windows、部署在 Linux）：
+
+1. **建立表和資料庫時，請用小寫**。
+2. **SQL 查詢中統一使用小寫表名與欄位名**。
+3. **開發團隊訂立命名規則，避免大小寫混用**。
+
+---
+
+## 6.2 Linux下大小写规则设置
+### ✅ 為什麼要設定 `lower_case_table_names=1`
+
+在 Linux 下，MySQL 預設 `lower_case_table_names=0`，也就是：
+- **資料表與資料庫名稱大小寫敏感**
+- `EMPLOYEES` 和 `employees` 是兩張不同的表
+
+但有些開發人員習慣大小寫混用（例如在 Windows 寫 SQL），這在部署到 Linux 就會造成錯誤。因此，我們可能會想讓 Linux 上也變成「大小寫不敏感」。
+
+---
+
+### ✅ 修改 `lower_case_table_names` 為 1 的正確流程（MySQL 5.7）
+
+> 適用於 **MySQL 5.7**
+
+#### ✏️ 步驟：
+
+1. 打開 MySQL 設定檔（通常為 `/etc/my.cnf`）
+2. 在 `[mysqld]` 區塊中加上：
+   ```ini
+   lower_case_table_names=1
+   ```
+3. 確保所有的資料表和資料庫名稱已經轉為 **小寫**（否則會出錯）
+4. 重啟 MySQL 服務
+   ```bash
+   sudo systemctl restart mysqld
+   ```
+
+---
+
+### 🧨 注意：MySQL 8 更嚴格
+
+> **MySQL 8.x 不允許啟動後再修改 `lower_case_table_names`。如果想設為 1，只能在初始化前就設好。**
+
+#### ✅ 修改步驟如下（MySQL 8 專用）：
+
+1. **停止 MySQL 服務**：
+   ```bash
+   sudo systemctl stop mysqld
+   ```
+
+2. **刪除原有資料資料夾**（⚠️會清空所有資料）：
+   ```bash
+   sudo rm -rf /var/lib/mysql
+   ```
+
+3. **編輯設定檔 `/etc/my.cnf`，新增參數**：
+   ```ini
+   [mysqld]
+   lower_case_table_names=1
+   ```
+
+4. **重新初始化資料目錄**（可用 `mysqld --initialize` 或用套件自動建立）
+
+5. **啟動 MySQL**：
+   ```bash
+   sudo systemctl start mysqld
+   ```
+
+---
+
+### 📘 範例說明
+
+#### 📌 預設大小寫敏感（Linux，MySQL 8，未設定 `lower_case_table_names`）
+
+```sql
+-- 建立表
+CREATE TABLE Employees (id INT);
+
+-- 查詢（大寫建立、小寫查詢）=> 錯誤
+SELECT * FROM employees;
+-- 錯誤訊息：Table 'test.employees' doesn't exist
+```
+
+---
+
+#### ✅ 設為大小寫不敏感後（MySQL 8，設為 1）
+
+```ini
+[mysqld]
+lower_case_table_names=1
+```
+
+刪除 `/var/lib/mysql` 後重新初始化 → 接著你就可以這樣使用：
+
+```sql
+-- 建立表（大小寫任意）
+CREATE TABLE Employees (id INT);
+
+-- 查詢（不管大小寫都可以）：
+SELECT * FROM employees;
+SELECT * FROM EMPLOYEES;
+SELECT * FROM EmPlOyEeS;
+-- 全部都能成功
+```
+
+---
+
+### ⚠️ 重點提醒
+
+- 一旦初始化過了，**MySQL 8 的 `lower_case_table_names` 就不能再改變**，不然啟動會錯。
+- 如果已經有資料的情況下，**你不能直接修改該參數而不處理原有資料，否則查不到表**。
+
+---
+
+## 6.3 SQL编写建议
+> **SQL 編寫風格建議**，目的在於避免錯誤並提高可讀性與跨平台（Linux / Windows）一致性。
+
+### ✅ 一、SQL 命名與書寫風格建議
+
+#### 🟩 建議 1：**關鍵字和函數名稱使用大寫**
+
+**目的：**
+- 可讀性好，讓語句邏輯部分一目了然
+- 與表名、欄位名明確區分
+
+**範例：**
+
+```sql
+-- ✅ 建議寫法
+SELECT MAX(salary) AS max_salary
+FROM employees
+WHERE department_id = 90;
+
+-- ⛔️ 不建議混合寫法
+select max(Salary) as max_salary from Employees where Department_Id = 90;
+```
+
+---
+
+#### 🟩 建議 2：**資料庫名、表名、欄位名、別名使用小寫**
+
+**目的：**
+- Linux 下 MySQL 是大小寫敏感的 → 減少錯誤機率
+- 一致性好，方便維護
+
+**範例：**
+
+```sql
+-- ✅ 建議寫法（欄位與別名都小寫）
+SELECT last_name AS name, salary AS monthly_salary
+FROM employees;
+
+-- ⛔️ 不建議寫法（混用大小寫）
+SELECT LastName AS Name, Salary AS MonthlySalary FROM Employees;
+-- 在 Linux 環境可能會找不到表或欄位
+```
+
+---
+
+#### 🟩 建議 3：**每條 SQL 結尾加上分號**
+
+**目的：**
+- 符合 SQL 語法習慣
+- 在某些工具或批量執行環境下必須加分號
+
+**範例：**
+
+```sql
+-- ✅ 正確寫法
+SELECT * FROM employees;
+
+-- ⛔️ 缺分號（可能造成錯誤或執行不完全）
+SELECT * FROM employees
+```
+
+---
+
+### 🐧 Linux MySQL 與命名敏感性的關係
+
+在 Linux 上執行 MySQL 時，**表名和欄位名是大小寫敏感的**：
+
+```sql
+-- 假設表叫 employees
+SELECT * FROM Employees;  -- ❌ 錯誤，找不到表
+SELECT * FROM employees;  -- ✅ 正確
+```
+
+#### ✅ 建議統一命名風格：全部小寫，避免問題
+
+---
+
+### 🔁 總結建議（你可以當作團隊規範）
+
+| 類型           | 命名範例       | 命名風格建議 |
+|----------------|----------------|----------------|
+| 關鍵字         | `SELECT`, `FROM` | **全部大寫** |
+| 函數名稱       | `MAX()`, `ROUND()` | **全部大寫** |
+| 資料庫/表名     | `employees`, `sales_db` | **全部小寫** |
+| 欄位名稱 / 別名 | `last_name AS name` | **全部小寫** |
+| 結尾           | `;` 結尾      | **強制加分號** |
+
+---
+
+### 🧪 延伸練習題
+
+```sql
+-- 請根據建議重寫以下 SQL，使其符合命名風格：
+
+select Name, Salary from EMPLOYEES where Department_ID = 10
+
+-- ✅ 建議寫法
+SELECT name, salary
+FROM employees
+WHERE department_id = 10;
+```
+
+# 7.
