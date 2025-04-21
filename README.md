@@ -1,7 +1,3 @@
-> 目前進度：基礎篇_第14章_查看视图
-> - 將基礎篇看完即可。
-
-
 >  **📚 教材** 
 > - [shuhongfan/MySql_Demo01](https://github.com/shuhongfan/MySql_Demo01/tree/main "shuhongfan/MySql_Demo01")
 > - [Dylan/数据库学习](https://gitee.com/zwhddup/mysql-learning "Dylan/数据库学习")
@@ -16,3 +12,7 @@
 > 目前跳過章節
 > - 基礎篇
 >   - 第18章_MySQL8其它新特性
+> - 高級篇
+>   - 第17章_其他數據庫日誌
+>   - 第18章_主從複製
+>   - 第19章_數據庫備份與恢復
