@@ -1045,3 +1045,1075 @@ innodb_log_file_size = 100MB
 > InnoDB的更新操作采用的是Write Ahead Log(预先日志持久化)策略，即先写日志，再写入磁盘。
 
 ![](./images/2402456-20220611170208391-698890501.png "")
+
+# 3. undo日誌
+> `redo log` 是事务持久性的保证，`undo log` 是事务原子性的保证。在事务中更新数据的前置操作其实是要先写入一个 `undo log` 。
+
+## 2.1 如何理解Undo日志
+事务需要保证原子性，也就是事务中的操作要么全部完成，要么什么也不做。但有时候事务执行到一半会出现一些情况，比如：
+
+1. 情况一：事务执行过程中可能遇到各种错误，比如服务器本身的错误，操作系统错误，甚至是突然断电导致的错误。
+
+2. 情况二：程序员可以在事务执行过程中手动输入 `ROLLBACK` 语句结束当前事务的执行。
+
+以上情况出现，我们需要把数据改回原先的样子，这个过程称之为 **回滚**，这样就可以造成一个假象：这个事务看起来什么都没做，所以符合原子性要求。
+
+每当我们要对一条记录做改动时(这里的 `改动可以指 INSERT、DELETE、UPDATE` )，都需要"留一手"——把回滚时所需的东西记下来。比如：
+
+- 你插入一条记录时，至少要把这条记录的主键值记下来，之后回滚的时候只需要把这个主键值对应的记录删掉就好了。(对于每个INSERT，InnoDB存储引擎会完成一个DELETE)
+
+- 你删除了一条记录，至少要把这条记录中的内容都记下来，这样之后回滚时再把由这些内容组成的记录插入到表中就好了。(对于每个DELETE，InnoDB存储引擎会执行一个INSERT)
+
+- 你修改了一条记录，至少要把修改这条记录前的旧值都记录下来，这样之后回滚时再把这条记录更新为旧值就好了。(对于每个UPDATE，InnoDB存储引擎会执行一个相反的UPDATE，将修改前的行放回去)
+
+MySQL把这些为了回滚而记录的这些内容称之为 **撤销日志** 或者 **回滚日志(即undo log)** 。注意，由于查询操作 (SELECT) 并不会修改任何用户记录，所以在查询操作执行时，并不需要记录 **相应的undo日志**。
+
+此外，undo log 会产生 redo log，也就是 undo log 的产生会伴随着 redo log 的产生，这是因为 undo log 也需要持久性的保护。
+
+## 2.2 Undo日志的作用
+### 🔁 一、Undo 日誌作用 1：**回滾數據**
+
+#### ✅ 誤解澄清：
+Undo 日誌並**不會把頁面整體還原**（不像備份還原），而是**邏輯性地撤銷某些操作**，只針對某個欄位或某筆記錄的變動進行「反向操作」。
+
+#### 🧠 範例情境：
+假設你執行了以下語句：
+
+```sql
+START TRANSACTION;
+UPDATE account SET balance = balance - 100 WHERE id = 1;
+-- 接著你手動回滾：
+ROLLBACK;
+```
+
+這時：
+1. `InnoDB` 在你執行 `UPDATE` 的當下，**會將原來 balance 的值寫入 Undo 日誌**（例如原來是 1000）。
+2. 當你 `ROLLBACK` 時，MySQL 不是把整個頁面還原，而是讀取 Undo 日誌中的記錄：
+   - 找到那筆記錄原來是 `balance = 1000`，然後再執行「將 balance 改回 1000」的邏輯操作。
+   - **這就是邏輯回滾**，只對該行起作用，不會動到頁面中其他同時被其他人修改的資料。
+
+#### ✅ 為什麼不做物理回滾？
+假設頁面中有多筆資料被多個人修改，直接還原整個頁面會影響其他使用者的修改紀錄。所以只能針對你改的資料進行**選擇性地回滾**。
+
+---
+
+### 👥 二、Undo 日誌作用 2：**MVCC（多版本並發控制）**
+
+#### ✅ 說明：
+MVCC 是讓讀取操作「不加鎖」也能讀取舊版本的數據，這樣才不會跟寫入操作互相阻塞。
+
+#### 🧠 範例情境：
+
+假設目前有兩個用戶同時操作資料表：
+
+##### 使用者 A：
+```sql
+START TRANSACTION;
+UPDATE account SET balance = balance - 100 WHERE id = 1;
+-- 尚未 COMMIT
+```
+
+##### 使用者 B：
+```sql
+SELECT * FROM account WHERE id = 1;
+```
+
+這時候，使用者 B 應該看到「更新前的數據」（例如 balance = 1000），而不是「已被減掉但還沒提交的 900」。
+
+#### 怎麼做到？
+- 在使用者 A 更新資料的同時，InnoDB 把原來那一行的內容（balance=1000）寫入 Undo 日誌。
+- 當使用者 B 查詢時，根據事務的隔離級別（例如 `REPEATABLE READ`），InnoDB **會根據 Undo 日誌幫 B 重建出一個舊版本的行記錄**，供 B 查閱，這樣就不需要加鎖了。
+
+---
+
+### 🧾 小結
+
+| 作用 | 解釋 | 實例 |
+|------|------|------|
+| **回滾數據** | 用於撤銷某筆資料變更，避免影響其他交易 | `UPDATE` → `ROLLBACK`，數值被邏輯還原 |
+| **MVCC** | 允許舊資料版本的讀取，實現非鎖定查詢 | 一人 `UPDATE`、另一人 `SELECT`，仍可看到原始資料 |
+
+---
+
+## 2.3 undo的存储结构
+### 2.3.1 回滚段与undo页
+#### 🔧 一、Undo 的儲存是「分段」管理的：Rollback Segment（回滾段）
+
+##### ✅ 基本觀念：
+Undo log 並不是整包亂放，而是被 **分段儲存在稱為 rollback segment 的區塊中**。
+
+- 每個 rollback segment 可容納 **1024 個 undo log segment（可視為子段）**
+- 每個 undo log segment 會配置一組 undo page（實際儲存資料的頁面）
+
+---
+
+#### 🧠 二、實際範例說明
+
+##### 🧾 假設：
+
+你執行了如下交易：
+
+```sql
+START TRANSACTION;
+UPDATE employee SET salary = salary + 1000 WHERE id = 100;
+```
+
+這條 SQL 在執行的同時會：
+1. 找一個可用的 rollback segment（如果超過上限，會等待）
+2. 在該 segment 中分配一個 undo log segment
+3. 寫入一筆「原始資料（salary 的舊值）」到 undo page 中
+
+---
+
+#### 📈 三、版本變化與限制
+
+| InnoDB 版本 | rollback segment 數量上限 | 可同時處理的最大事務數量 |
+|-------------|-----------------------------|------------------------------|
+| 1.1 以下    | 1 個 rollback segment       | **最多 1024 筆事務同時在線** |
+| 1.1 起       | 128 個 rollback segment     | **最多 128 × 1024 = 131072 筆事務** |
+
+##### ✅ 為什麼會有限制？
+因為每個 rollback segment 最多容納 1024 個 undo log segment，也就是 1024 個事務。這是一種事務隔離機制，讓每筆交易有自己的日誌空間。
+
+---
+
+#### 📂 四、Undo 日誌的儲存路徑與文件設置
+
+##### ✅ 參數介紹與用途：
+
+| 參數名稱 | 功能 |
+|----------|------|
+| `innodb_undo_logs` | 控制 rollback segment 的個數（預設 128） |
+| `innodb_undo_tablespaces` | 控制 undo log 分佈的文件數量（例如分散到多個檔案） |
+| `innodb_undo_directory` | 指定 undo 日誌儲存目錄（預設是 `.`，即資料目錄） |
+
+##### 🧠 舉例說明：
+
+```ini
+innodb_undo_logs = 64
+innodb_undo_tablespaces = 4
+innodb_undo_directory = /var/lib/mysql/undolog
+```
+
+此設定代表：
+- 系統會建立 64 個 rollback segments
+- 並平均分散在 4 個檔案中，檔名如 `undo001`, `undo002`, ...
+- 這些文件會出現在 `/var/lib/mysql/undolog/` 資料夾中
+
+這樣可以**減少 I/O 瓶頸**，提高性能，尤其是高並發下效果明顯。
+
+---
+
+#### 🔁 總結一圖
+
+```
+一個 rollback segment
+    └── 包含 1024 個 undo log segment
+             └── 各自分配 undo page（記錄修改前的數據）
+                     └── 存在於共享表空間或 undo tablespace 檔案中
+```
+
+---
+
+#### ✅ 小提醒
+一般不需要手動調整這些 undo 設定，除非你在做**高併發、大事務量的優化**，或使用的是獨立表空間模式。
+
+如果你還想知道這些 undo page 與 redo log、buffer pool 的互動，我也可以幫你畫出整個流程圖。需要的話告訴我喔！
+
+### 2.3.2 undo页的重用
+#### 🔧 一、Undo 的儲存是「分段」管理的：Rollback Segment（回滾段）
+
+##### ✅ 基本觀念：
+Undo log 並不是整包亂放，而是被 **分段儲存在稱為 rollback segment 的區塊中**。
+
+- 每個 rollback segment 可容納 **1024 個 undo log segment（可視為子段）**
+- 每個 undo log segment 會配置一組 undo page（實際儲存資料的頁面）
+
+---
+
+#### 🧠 二、實際範例說明
+
+##### 🧾 假設：
+
+你執行了如下交易：
+
+```sql
+START TRANSACTION;
+UPDATE employee SET salary = salary + 1000 WHERE id = 100;
+```
+
+這條 SQL 在執行的同時會：
+1. 找一個可用的 rollback segment（如果超過上限，會等待）
+2. 在該 segment 中分配一個 undo log segment
+3. 寫入一筆「原始資料（salary 的舊值）」到 undo page 中
+
+---
+
+#### 📈 三、版本變化與限制
+
+| InnoDB 版本 | rollback segment 數量上限 | 可同時處理的最大事務數量 |
+|-------------|-----------------------------|------------------------------|
+| 1.1 以下    | 1 個 rollback segment       | **最多 1024 筆事務同時在線** |
+| 1.1 起       | 128 個 rollback segment     | **最多 128 × 1024 = 131072 筆事務** |
+
+##### ✅ 為什麼會有限制？
+因為每個 rollback segment 最多容納 1024 個 undo log segment，也就是 1024 個事務。這是一種事務隔離機制，讓每筆交易有自己的日誌空間。
+
+---
+
+#### 📂 四、Undo 日誌的儲存路徑與文件設置
+
+##### ✅ 參數介紹與用途：
+
+| 參數名稱 | 功能 |
+|----------|------|
+| `innodb_undo_logs` | 控制 rollback segment 的個數（預設 128） |
+| `innodb_undo_tablespaces` | 控制 undo log 分佈的文件數量（例如分散到多個檔案） |
+| `innodb_undo_directory` | 指定 undo 日誌儲存目錄（預設是 `.`，即資料目錄） |
+
+##### 🧠 舉例說明：
+
+```ini
+innodb_undo_logs = 64
+innodb_undo_tablespaces = 4
+innodb_undo_directory = /var/lib/mysql/undolog
+```
+
+此設定代表：
+- 系統會建立 64 個 rollback segments
+- 並平均分散在 4 個檔案中，檔名如 `undo001`, `undo002`, ...
+- 這些文件會出現在 `/var/lib/mysql/undolog/` 資料夾中
+
+這樣可以**減少 I/O 瓶頸**，提高性能，尤其是高並發下效果明顯。
+
+---
+
+#### 🔁 總結一圖
+
+```
+一個 rollback segment
+    └── 包含 1024 個 undo log segment
+             └── 各自分配 undo page（記錄修改前的數據）
+                     └── 存在於共享表空間或 undo tablespace 檔案中
+```
+
+---
+
+#### ✅ 小提醒
+一般不需要手動調整這些 undo 設定，除非你在做**高併發、大事務量的優化**，或使用的是獨立表空間模式。
+
+如果你還想知道這些 undo page 與 redo log、buffer pool 的互動，我也可以幫你畫出整個流程圖。需要的話告訴我喔！
+
+### 2.3.3 回滚段与事务
+#### ✅ 一、核心概念整理
+
+| 名詞           | 定義 |
+|----------------|------|
+| **回滾段（rollback segment）** | Undo 日誌的邏輯容器，用來儲存各事務產生的 undo log |
+| **盤區（extent 或稱 undo log segment）** | 回滾段中實際分配空間的單元，一個盤區中含有多個 Undo 頁 |
+| **Undo 表空間（undo tablespace）** | 實體上儲存 rollback segment 的檔案，可以是 ibdata 或獨立檔案 |
+
+---
+
+#### 🔧 二、範例說明：一筆交易與 rollback segment 的關係
+
+假設有三個事務分別在同一時間啟動：
+
+```sql
+-- Transaction A
+START TRANSACTION;
+UPDATE user SET name = 'Alice' WHERE id = 1;
+
+-- Transaction B
+START TRANSACTION;
+UPDATE user SET name = 'Bob' WHERE id = 2;
+
+-- Transaction C
+START TRANSACTION;
+UPDATE user SET name = 'Charlie' WHERE id = 3;
+```
+
+##### 啟動後：
+
+1. InnoDB 分別為 A、B、C 指派一個可用的 rollback segment（假設 128 個可用）
+2. 每個事務只會用一個 rollback segment，不會跨段使用
+3. 這些事務在修改資料時，**會把舊的資料寫入該 rollback segment 中的 undo 頁**
+
+---
+
+#### 🧠 三、盤區（extent）的動態擴展與重用
+
+##### 🔄 運作機制如下：
+
+1. 每個 rollback segment 開始時有一個或多個盤區（空間塊）
+2. 當事務執行 UPDATE/DELETE 造成 undo log 增長時：
+   - 若空間不夠 → 擴展下一個盤區
+   - 若整個 rollback segment 空間不足 → 看能否擴展新的盤區（或依設限報錯）
+
+3. **Undo 頁（16KB）來自這些盤區中**，這些頁可被複用（上節你問過）
+
+---
+
+#### 🧾 實際流程示意：
+
+```
+【Undo Tablespace】
+┌────────────────────────────┐
+│ Rollback Segment 1         │ ← Transaction A 指派這個段
+│   ├─ Undo Log Segment A1    │ ← 寫入原始 name: 'Ann'
+│   ├─ Undo Log Segment A2    │ ← 不夠時擴展新的盤區
+│                             │
+│ Rollback Segment 2         │ ← Transaction B
+│   ├─ Undo Log Segment B1    │
+│                             │
+│ Rollback Segment 3         │ ← Transaction C
+│   ├─ Undo Log Segment C1    │
+└────────────────────────────┘
+```
+
+---
+
+#### ✅ 四、事務提交後會發生什麼？
+
+提交時，InnoDB 會做兩件事：
+
+1. **把 undo log 放入一個 purge 鏈表中（供清理線程後續刪除）**
+   - 是 deferred clean（延遲清理）
+
+2. **判斷 undo 頁是否能重用**
+   - 如果該頁還有空間且無活躍舊版本引用 → **可被下個事務重用**
+   - 否則等 purge thread 清掉頁面資料再釋放空間
+
+---
+
+#### 📌 小結：事務與 rollback segment 的互動重點
+
+| 概念 | 說明 |
+|------|------|
+| 每個事務只用一個 rollback segment | 節省管理成本 |
+| rollback segment 可同時被多個事務用 | 並發處理下的共享容器 |
+| 空間不足時可擴展盤區（segment） | 彈性空間管理 |
+| 提交後的 undo log 不立即刪除 | 等 purge 線程清理 |
+| undo 頁可能重用 | 若空間未滿且無舊版本引用 |
+
+---
+
+### 2.3.4 回滚段中的数据分类
+#### 🧠 一、Undo 日誌的「三種資料狀態分類」
+
+InnoDB 把回滾段（rollback segment）裡的 undo log 分成三個狀態：
+
+| 狀態 | 說明 | 是否能刪除？ |
+|------|------|--------------|
+| ① 未提交的資料（uncommitted） | 該筆資料屬於**正在進行中的事務** | ❌ 絕不能刪除 |
+| ② 已提交但未過期（committed） | 事務已提交，但還在 undo 保留期（`undo_retention`）內 | ❌ purge 線程不能立即刪除 |
+| ③ 已過期的資料（expired） | 事務已提交，且超過 `undo_retention` 時間 | ✅ purge 線程會清除 |
+
+---
+
+#### 🧾 二、undo_retention 是什麼？
+
+這是 InnoDB 的系統參數，預設可能為 **"8秒"** 或由你自行設定（單位：秒）：
+
+```sql
+SHOW VARIABLES LIKE 'innodb_undo_retention';
+```
+
+這個參數指定了：
+> 即使一筆事務已經提交，**仍然要保留其 undo log 至少幾秒鐘**，以保證資料快照或複製機制能夠正常運作。
+
+---
+
+#### 🧪 三、實際操作範例
+
+```sql
+-- 事務 A 啟動並查詢
+START TRANSACTION;
+SELECT * FROM orders WHERE id = 100;
+
+-- 事務 B 對同一筆資料做修改並提交
+START TRANSACTION;
+UPDATE orders SET status = 'shipped' WHERE id = 100;
+COMMIT;
+```
+
+此時：
+- 事務 A 是 **快照讀取（MVCC）**，需要看到舊資料 → 必須用到 **B 的 undo log**
+- 即使 B 已經提交了，它的 undo log **不能立刻刪除**
+- 要等到事務 A 結束、且超過 `undo_retention` 時間，**purge 線程** 才會判斷是否可以清除
+
+---
+
+#### 🔁 四、Undo Log 的生命週期圖解
+
+```
+[事務執行中] → [提交但未過期] → [過期可刪除]
+      │                  │                   │
+      │                  │                   └─ 被 purge 清除
+      │                  └─ 不能刪，因 MVCC 快照可能還需
+      └─ 絕不能刪，會導致 rollback 出錯
+```
+
+---
+
+#### 🧠 五、為什麼不馬上刪除？
+
+因為 MySQL 是「**支援多事務並發與快照一致性（MVCC）**」的資料庫，
+- 一筆資料的 **舊版本是用 undo log 組成的**
+- 所以：
+  - ❌ 還有事務沒結束 → 不能刪
+  - ❌ 保留期未到 → 不能刪
+  - ✅ 所有依賴它的快照都結束、保留期已過 → purge 才刪
+
+---
+
+#### ✅ 總結重點
+
+| Undo 類型 | 說明 | 處理方式 |
+|-----------|------|-----------|
+| Uncommitted | 尚未提交 | 絕對不能刪除 |
+| Committed（未過期） | 已提交但在保留期內 | 等待 purge 評估 |
+| Expired | 已提交，保留期已過 | 可以釋放磁碟空間 |
+
+---
+
+## 2.4 undo的类型
+### 🔍 一、兩種 Undo Log 類型的比較表
+
+| 類型              | 產生來源             | 是否參與 MVCC | 是否需要 purge | 提交後可否立即刪除 |
+|-------------------|----------------------|----------------|------------------|----------------------|
+| `insert undo log` | `INSERT`             | ❌ 不會        | ❌ 不需要        | ✅ **可以立即刪除** |
+| `update undo log` | `UPDATE`, `DELETE`   | ✅ 會用到      | ✅ 需要 purge    | ❌ **不能立即刪除** |
+
+---
+
+### 🧠 二、實例說明
+
+#### ✅ 1. `insert undo log`（插入操作產生的 undo）
+
+```sql
+START TRANSACTION;
+INSERT INTO users (id, name) VALUES (1, 'Alice');
+COMMIT;
+```
+
+- 插入的這筆資料，在提交前 **只有當前事務可見**，其他人看不到。
+- 所以這筆 undo log **只需支援 rollback**。
+- 當你提交後，這筆 undo log 就**可以立刻丟掉**了（不會再被任何人查到這筆舊資料）。
+
+#### ✅ 2. `update undo log`（更新或刪除操作產生的 undo）
+
+```sql
+START TRANSACTION;
+UPDATE users SET name = 'Bob' WHERE id = 1;
+COMMIT;
+```
+
+- 即使你已經提交，**別人讀取時可能還是會看到修改前的資料版本**（取決於其事務的啟動時間）
+- 所以這筆 undo log 需要保留，用於 **MVCC 快照讀**
+- 因此不能馬上刪除，必須放入 undo 鏈表，等 **purge 線程判斷安全後再刪除**
+
+---
+
+### 🔁 三、視覺流程圖解（簡化版）
+
+```
+INSERT → 產生 insert undo → ✔ 只要支援 rollback → 提交後馬上刪除 ✅
+
+UPDATE/DELETE → 產生 update undo → ❗ 需支援 rollback + MVCC → 提交後暫存 → purge 清除 ❌
+```
+
+---
+
+### 🎯 小總結
+
+| 類型 | 用途 | 特性 |
+|------|------|------|
+| **Insert Undo Log** | 用於回滾 INSERT 操作 | 不影響其他事務、可立即刪除 |
+| **Update Undo Log** | 用於回滾 UPDATE/DELETE、提供快照舊版本 | 必須保留以供 MVCC 使用，等 purge 線程處理 |
+
+---
+
+## 2.5 undo log的生命周期
+### 2.5.1 简要生成过程
+#### 🧠 一、背景知識先釐清
+
+| 名詞 | 功能 |
+|------|------|
+| **Undo Log** | 保留資料修改前的舊值 → 用於事務回滾 + MVCC |
+| **Redo Log** | 記錄資料修改後的新值 → 用於宕機恢復（crash recovery） |
+| **Buffer Pool** | 資料與索引在記憶體中的暫存區（變更先寫這裡） |
+
+---
+
+#### 🧾 二、示範範例解釋（A=1 → 3，B=2 → 4）
+> 假设有 2 个数值，分别为 `A=1` 和 `B=2`，然后将A修改为3，B修改为4
+
+```
+原始狀態：A = 1，B = 2
+```
+
+##### 操作流程（對應步驟解釋）：
+
+| 步驟 | 行為 | 目的 |
+|------|------|------|
+| 1. start transaction | 開始事務 | 開始保證一致性的流程 |
+| 2. 記錄 A=1 到 Undo Log | 儲存 A 的原始值 | 若事務失敗可以回滾 |
+| 3. 更新 A = 3 | 寫入 Buffer Pool 中的 A | 尚未寫入磁碟 |
+| 4. 記錄 A=3 到 Redo Log | 保留新值的修改操作 | 若系統宕機可重作 |
+| 5. 記錄 B=2 到 Undo Log | 儲存 B 的原始值 | 為 rollback 做準備 |
+| 6. 更新 B = 4 | 寫入 Buffer Pool 中的 B | 同樣尚未寫入磁碟 |
+| 7. 記錄 B=4 到 Redo Log | 將修改後值寫入 redo | 為 crash recovery 做準備 |
+| 8. Redo Log 刷新到磁碟 | 持久化 redo log | 保證即使宕機也能重做 |
+| 9. commit | 正式提交事務 | 表示所有邏輯變更完成 |
+
+---
+
+#### 💥 三、不同「宕機時機」對系統的影響
+
+| 時機 | 效果 | MySQL 如何處理 |
+|------|------|----------------|
+| **步驟 1～8 之間宕機** | **事務未提交**，不得對磁碟有任何修改 | 利用 Undo Log 回滾資料變更 |
+| **步驟 8～9 宕機** | Redo Log 已經刷入磁碟，但尚未 commit | MySQL 啟動後會選擇「回滾」或「完成提交」 |
+| **步驟 9 之後宕機** | 事務已提交，但資料還在 Buffer Pool 中未寫入磁碟 | 啟動後根據 redo log 進行 crash recovery（把 A=3、B=4 寫回磁碟） |
+
+---
+
+#### 🌀 四、Undo Log + Redo Log 的配合機制：**WAL + 原子性**
+
+1. **WAL（Write-Ahead Logging）機制**：
+   - 一定要先寫 Undo / Redo Log，再更新 Buffer Pool
+   - 這樣才能保證不論宕機或失敗，都能還原或重做
+
+2. **原子性（Atomicity）保障**：
+   - 若沒 commit，就算資料在 Buffer Pool 被改了，也不能寫入磁碟
+   - 若 commit，但沒寫入磁碟，也能用 redo log 把新值補寫回來
+
+---
+
+#### 🧠 五、總結流程關鍵點
+
+| 重點 | 解釋 |
+|------|------|
+| **先寫 Undo Log** | 為了 rollback 用，記住舊值 |
+| **再更新 Buffer Pool 中的資料** | 變更暫存在記憶體，不直接改磁碟 |
+| **再寫 Redo Log（新值）** | 萬一宕機可重做 |
+| **Redolog fsync 到磁碟後才能 commit** | 保證持久性（Durability） |
+| **Crash 時根據 Redo Log 恢復資料到正確狀態** | 包含尚未落盤但已提交的資料 |
+| **Rollback 時用 Undo Log 還原修改前狀態** | 保證一致性 |
+
+
+只有Buffer Pool的流程：
+
+![](./images/2402456-20220611170207787-1102559865.png "")
+
+有了Redo Log和Undo Log之后：
+
+![](./images/2402456-20220611170207468-1460356168.png "")
+
+---
+
+### 2.5.2 详细生成过程
+#### 「行記錄」背後所附帶的幾個「隱藏欄位」
+##### 🧠 一、隱藏欄位簡介與用途整理
+
+| 欄位名稱      | 中文說明       | 用途說明 |
+|---------------|----------------|----------|
+| `DB_ROW_ID`    | 行號ID         | 若無主鍵或唯一索引，InnoDB 自動生成，作為聚簇索引的鍵值 |
+| `DB_TRX_ID`    | 事務ID         | 記錄最後一次修改這筆記錄的事務 ID |
+| `DB_ROLL_PTR`  | 回滾指標       | 指向對應的 undo log，讓系統可回到修改前版本（支援 MVCC） |
+
+---
+
+##### 🧾 二、具體範例
+
+假設你建立了一個很簡單的表：
+
+```sql
+CREATE TABLE employee (
+  name VARCHAR(20),
+  salary INT
+);
+```
+
+這個表 **沒有主鍵**，也沒有唯一索引，那麼：
+
+- InnoDB 會自動加入一個隱藏欄位 `DB_ROW_ID` 作為聚簇索引的主鍵。
+- 當你插入一筆資料後，例如：
+
+```sql
+INSERT INTO employee VALUES ('Alice', 50000);
+```
+
+InnoDB 背後其實儲存了以下內容：
+
+```
+name = 'Alice'
+salary = 50000
+DB_ROW_ID = 123456    ← 自動遞增的行號
+DB_TRX_ID = 1001      ← 本次 insert 動作的事務 ID
+DB_ROLL_PTR = NULL    ← insert 沒有舊資料，不需 undo log
+```
+
+---
+
+###### 📌 如果接著執行：
+
+```sql
+START TRANSACTION;
+UPDATE employee SET salary = 60000 WHERE name = 'Alice';
+COMMIT;
+```
+
+則該行記錄變為：
+
+```
+name = 'Alice'
+salary = 60000
+DB_ROW_ID = 123456        ← 不變
+DB_TRX_ID = 1002          ← 本次 update 動作的事務 ID
+DB_ROLL_PTR = → UndoLog   ← 指向儲存 salary = 50000 的 undo 資料
+```
+
+---
+
+##### 🔁 三、這些隱藏欄位如何幫助 InnoDB 實現功能？
+
+###### ✅ `DB_ROW_ID`
+- 在沒有主鍵的情況下，InnoDB 用它當聚簇索引的鍵值，確保每一筆資料的唯一性與排序性。
+
+###### ✅ `DB_TRX_ID`
+- 幫助 InnoDB 判斷哪筆資料版本屬於哪個事務。
+- 與讀取事務的 ID 比較，決定是否可見（MVCC 的版本控制核心）
+
+###### ✅ `DB_ROLL_PTR`
+- 指向 Undo Log 中舊版本的資料：
+  - ✅ 查詢時若需要「快照版本」→ 就透過這個指標回頭找 Undo Log
+  - ✅ 回滾時 → 就用這個指標找到該筆舊資料恢復過來
+
+---
+
+##### 🧠 四、查詢快照過程簡單示意圖
+
+```
+資料行：
+ salary = 60000
+ DB_TRX_ID = 1002
+ DB_ROLL_PTR → undo_log(salary=50000)
+
+若 SELECT 的事務 ID 是 1001（小於 1002） → 看不到 60000 → 透過 ROLL_PTR 找到 50000 回傳
+```
+
+---
+
+##### ✅ 小結表
+
+| 欄位名稱 | 功能 | 何時使用 |
+|----------|------|-----------|
+| `DB_ROW_ID` | 無主鍵時作為聚簇索引主鍵 | 沒有主鍵時自動產生 |
+| `DB_TRX_ID` | 記錄最近修改的事務ID | 用於 MVCC 可見性判斷 |
+| `DB_ROLL_PTR` | 指向 undo log | 用於快照讀與 rollback |
+
+---
+
+#### 当我们执行INSERT时：
+##### 🧾 一、範例場景：執行 INSERT 的流程
+
+```sql
+BEGIN;
+INSERT INTO user (name) VALUES ("tom");
+```
+
+在這裡，假設你執行的是一筆簡單的 `INSERT` 操作，系統背後做了什麼？
+
+---
+
+##### 🧠 二、InnoDB 背後的動作
+
+###### 🔧 系統自動做的事：
+1. **在 user 表插入一筆資料**（假設主鍵是自增 id = 1001）
+2. **產生一筆 insert undo log**：
+   - undo log 類型：`INSERT_UNDO`
+   - 記錄內容：表名、主鍵（id=1001）、被插入欄位（name）、值（"tom"）
+3. **將這筆記錄的 `ROLL_PTR` 指向這個 undo log**
+4. **此筆資料的 TRX_ID 記錄當前事務的 ID**
+
+---
+
+##### 🧪 三、ROLLBACK 時怎麼處理？
+
+當你執行：
+
+```sql
+ROLLBACK;
+```
+
+InnoDB 會透過該資料列的 `ROLL_PTR`：
+
+1. 找到 insert undo log
+2. undo log 告訴系統：這是一筆尚未提交的 `INSERT`
+3. 這筆記錄應該在回滾時 **直接從資料頁刪除**
+   - 用主鍵 id = 1001 找到這筆記錄
+   - 直接把它從表中移除（**邏輯刪除**）
+
+---
+
+##### 📌 四、重點說明：為什麼能「快速刪除」？
+
+因為：
+- INSERT 時系統就把主鍵和欄位值記錄在 undo log 裡
+- rollback 時 **不需要掃描整個表**
+- 直接根據主鍵定位，從聚簇索引中刪掉該筆資料
+- 這是比 UPDATE 的回滾還快的操作！
+
+---
+
+##### 🎯 五、insert undo log 的特性
+
+| 項目 | 說明 |
+|------|------|
+| 使用時機 | `INSERT` 操作（尚未提交） |
+| 用途 | 回滾時刪除剛插入的資料 |
+| 含資料 | 主鍵 + 插入的欄位名稱與數值 |
+| 可見性 | 只對當前事務可見，其他事務看不到 |
+| 會不會被保留 | ✅ **提交後可以立即刪除**（不會參與 MVCC） |
+
+---
+
+##### ✅ 小結：整體流程圖解
+
+![](./images/2402456-20220611170207023-350381258.png "")
+
+```
+[INSERT] → 寫入 user 表（id=1001, name='tom'）
+        → 建立 insert undo log（記錄主鍵與欄位值）
+        → ROLL_PTR → 指向這筆 undo log
+
+[ROLLBACK] → ROLL_PTR → 找到 insert undo log → 透過主鍵刪除該筆資料
+```
+
+---
+
+
+#### 当我们执行UPDATE时：
+**MySQL InnoDB 在執行 `UPDATE` 操作時產生的 update undo log 的結構與回滾邏輯**。這是 InnoDB **MVCC 機制與資料一致性保障的核心**。
+
+我會用兩個具體範例（更新非主鍵 vs 主鍵）、配合圖解思維、循序說明每一步如何建立 undo log 及其串接關係，幫你一次搞懂。
+
+---
+
+##### 🧠 一、前置概念整理：Undo Log 是鏈狀結構
+
+每筆 `UPDATE` 都會：
+- 產生一個新的 `update undo log`
+- 新的 undo log 會 **指向前一版本的 undo log**
+- 就像形成一條「**版本鏈（undo log chain）**」
+- 每筆 undo log 都有一個遞增的 `undo_no`
+
+這就是為什麼 MySQL 可以根據 `ROLL_PTR` 追溯所有歷史版本！
+
+---
+
+##### 🧾 二、範例 1：**更新「非主鍵」欄位**
+
+![](./images/2402456-20220611170206778-443323117.png "")
+
+```sql
+UPDATE user SET name = "sun" WHERE id = 1;
+```
+
+###### ✨ 發生了什麼：
+
+1. 找到 `id=1` 的記錄（假設原值 name = "tom"）
+2. 產生一筆 `update undo log`：
+   - 記錄 name = "tom"
+   - undo_no = 1
+   - 指向 undo_no = 0（原始插入的 insert undo）
+3. 更新 Buffer Pool 中 name = "sun"
+4. 記錄 trx_id、roll_ptr → 指向 undo_no = 1
+
+###### 📌 結果：
+
+這筆資料的隱藏欄位變成：
+```text
+DB_TRX_ID = 當前事務ID
+DB_ROLL_PTR → undo_no = 1（記錄 name = "tom"）
+```
+
+---
+
+##### 🧾 三、範例 2：**更新「主鍵」欄位**
+
+![](./images/2402456-20220611170206492-262128974.png "")
+
+```sql
+UPDATE user SET id = 2 WHERE id = 1;
+```
+
+###### ⚠️ 更新主鍵的處理比較特殊：
+
+1. 原來的 `id = 1` 的資料 **不能直接覆蓋**
+   - 因為主鍵是聚簇索引的 key，要保留原來的 B+ Tree 結構
+2. 系統會：
+   - **把舊的那筆資料加上 deletemark（邏輯標記為刪除）**
+   - 寫入一筆 undo log（undo_no = 1）
+   - 然後 **插入一筆新資料 id = 2, name = ...**
+   - 新資料也會產生新的 undo log（undo_no = 2）
+
+###### 🔗 結果是形成一條「雙版本」記錄：
+```text
+舊資料：id=1, name="sun", deletemark=1
+  - rollback ptr → undo_no=1（name="tom"）
+
+新資料：id=2, name="sun"
+  - rollback ptr → undo_no=2（name="sun"、id=1）
+```
+
+---
+
+##### 🔁 四、為什麼要這麼設計？
+
+這樣設計可以支援：
+- **MVCC：可以根據 TRX_ID 決定看到哪一個版本**
+- **ROLLBACK：可以從 ROLL_PTR 依序往前走，回到任意版本**
+- **複雜變更：支援一筆資料被多次修改，每次都保留變更紀錄**
+
+---
+
+##### 🔄 五、視覺化版本鏈（Undo Chain）
+
+```text
+-- 初始插入 --
+undo_no=0 → name="tom", id=1
+
+-- 第一次更新 name --
+undo_no=1 → name="tom", id=1
+            ↑
+
+-- 第二次更新主鍵 --
+undo_no=2 → name="sun", id=1
+            ↑
+        現在版本：name="sun", id=2
+```
+
+---
+
+##### ✅ 六、小結重點表
+
+| 操作類型       | Undo log 類型 | 是否產生多版本 | 如何回滾 |
+|----------------|----------------|----------------|-----------|
+| INSERT         | insert undo    | 否             | 直接刪除該筆資料 |
+| UPDATE 非主鍵  | update undo    | 是             | 更新欄位為舊值 |
+| UPDATE 主鍵    | delete + insert（兩筆） | 是 | 回滾 insert，復原 delete mark |
+
+---
+
+### 2.5.3 undo log是如何回滚的
+> **Undo Log 回滾的核心原理：根據資料行的 ROLL_PTR 找到對應的 undo log，將行內容還原為變更前的狀態。**
+
+---
+
+#### 🧠 一、Undo Log 回滾的基本流程（核心概念）
+
+1. 每筆資料行都有一個隱藏欄位 `DB_ROLL_PTR`，**指向這筆資料修改前的 undo log**
+2. 當執行 `ROLLBACK` 或系統 crash 復原未提交事務時：
+   - MySQL 會讀取資料行的 `ROLL_PTR`
+   - 找到對應的 undo log（記錄了變更前的舊值）
+   - 將當前值「邏輯還原」成舊值
+
+---
+
+#### 🧾 二、具體範例：一筆 UPDATE 的回滾過程
+
+##### 假設你執行以下語句：
+
+```sql
+BEGIN;
+UPDATE user SET name = 'Tom' WHERE id = 1;
+ROLLBACK;
+```
+
+##### ✅ 系統背後的操作：
+
+1. 找到 `id = 1` 的資料（假設原來是 `name = 'Alice'`）
+2. 寫入一筆 undo log：
+   ```text
+   undo_log = {
+     undo_no: 1,
+     trx_id: 1001,
+     table: user,
+     pk: 1,
+     old_value: name = 'Alice'
+   }
+   ```
+3. 更新 Buffer Pool 中 `name = 'Tom'`
+4. 資料行的 `ROLL_PTR → undo_no = 1`
+
+---
+
+##### 🔁 執行 `ROLLBACK` 時：
+
+1. InnoDB 根據資料行的 `ROLL_PTR → undo_no = 1`
+2. 找到對應的 undo log
+3. 用 `undo_log.old_value` 將欄位值還原成 `Alice`
+4. 清除該筆未提交資料對其他事務的影響（視隔離級別）
+
+---
+
+#### 🔗 三、連續變更怎麼辦？（多層 undo 回滾）
+
+```sql
+BEGIN;
+UPDATE user SET name = 'Tom' WHERE id = 1;
+UPDATE user SET name = 'Bob' WHERE id = 1;
+ROLLBACK;
+```
+
+##### 系統建立：
+
+```text
+undo_no=2 → name="Tom"   ← 最新變更（Bob → Tom）
+   ↑
+undo_no=1 → name="Alice" ← 最初變更（Tom → Alice）
+```
+
+##### 回滾流程：
+
+1. 根據 `ROLL_PTR → undo_no=2`，將 name = "Bob" 還原為 "Tom"
+2. `ROLL_PTR → undo_no=1`，再還原為 "Alice"
+3. 資料回到原始狀態
+
+---
+
+#### 🛠️ 四、特殊情況：UPDATE 主鍵 or DELETE
+
+##### 主鍵變更：
+
+會產生 **delete mark + 新插入** 的兩筆資料 → 需要同時還原：
+- **刪除新插入資料**
+- **移除 delete mark**
+
+##### DELETE：
+
+- Undo Log 會記錄整筆被刪除的行資料
+- 回滾時透過主鍵 **重新插入該筆記錄**
+
+---
+
+#### ✅ 小結：Undo Log 回滾原則
+
+| 操作類型 | Undo Log 內容 | 回滾操作方式 |
+|----------|----------------|---------------|
+| `INSERT` | 主鍵 + 欄位值   | **刪除資料** |
+| `UPDATE` | 舊欄位值        | **還原欄位值** |
+| `DELETE` | 整筆資料        | **重新插入** |
+
+---
+
+### 2.5.4 undo log的删除
+#### 🧠 一、兩種 Undo Log 的刪除策略
+
+| Undo 類型            | 是否可立即刪除？ | 為什麼？ | 誰負責刪除？ |
+|----------------------|------------------|----------|---------------|
+| **Insert Undo Log**  | ✅ 可立即刪除    | 插入資料只對當前事務可見，提交後他人才能看見，不需提供 MVCC | **事務提交時即刪除** |
+| **Update Undo Log**  | ❌ 不可立即刪除 | 提供 MVCC 快照用，其他讀取事務可能還需要它 | 交給 **purge 線程** 清除 |
+
+---
+
+#### 🧾 二、Insert Undo Log 刪除範例
+
+```sql
+START TRANSACTION;
+INSERT INTO user (name) VALUES ("Tom");
+COMMIT;
+```
+
+- 插入資料前 → 產生 insert undo log
+- 資料只對當前事務可見 → 不影響他人
+- **提交時立刻刪除** undo log（無需保留）
+
+---
+
+#### 🧪 三、Update Undo Log 為什麼不能馬上刪？
+
+```sql
+-- 事務 A
+START TRANSACTION;
+SELECT * FROM user WHERE id = 1;
+
+-- 事務 B
+START TRANSACTION;
+UPDATE user SET name = "Bob" WHERE id = 1;
+COMMIT;
+```
+
+- 事務 A 還活著 → 必須看到「更新前的資料」（舊版本）
+- 這就需要 B 的 undo log 來重建「快照資料」
+- 因此：**B 的 update undo log 不能馬上刪除！**
+
+👉 所以：
+- update undo log 會放入一個 **undo 鏈表**
+- 等 purge 線程確認「所有可能會用到的事務都結束了」才刪
+
+---
+
+#### 🧹 四、purge 線程的兩個主要任務
+
+##### 1️⃣ 清理過期的 undo log：
+
+- 判斷哪些 update undo log 不再需要（無事務會用）
+- 刪除這些 log 所在的 undo page（如果整頁都可刪）
+
+##### 2️⃣ 真正刪除 delete-marked 資料行：
+
+InnoDB 中的 DELETE 是「假刪除」，流程如下：
+
+```sql
+DELETE FROM user WHERE id = 1;
+```
+
+實際上：
+- MySQL 不會馬上刪掉這筆資料
+- 而是在資料行上加一個 **Delete_Bit = 1**
+- 這是一種「**邏輯刪除**」或「標記刪除」
+
+只有等 purge 線程判斷：
+- 該行無任何活躍事務在看它
+- undo log 已不再需要
+→ 才會真的從資料頁面中 **物理刪除該行**
+
+---
+
+#### 🔁 五、總結：InnoDB 的資料刪除是「兩段式」的
+
+| 操作階段 | 行為 | 負責者 |
+|----------|------|--------|
+| 第一階段 | 標記 Delete_Bit（邏輯刪除） | 用戶事務 |
+| 第二階段 | 實體移除記錄行（物理刪除） | purge 線程 |
+
+---
+
+#### ✅ 六、小結圖示流程
+
+```
+          INSERT              UPDATE / DELETE
+             │                     │
+             ▼                     ▼
+     insert undo log         update undo log + Delete_Bit
+             │                     │
+         提交刪除              提交 → 放入 undo 鏈表
+                                   │
+                           ▼ purge 線程監控
+         ┌────────────────────────────------┐
+         │ 條件符合 → 刪 undo + 清 delete-mark│
+         └────────────────────────────------┘
+```
+
+---
+
+## 2.6 小结
+![](./images/2402456-20220611170206169-1836293310.png "")
+
+- **undo log:** 是逻辑日志，对事务回滚时，只是将数据库逻辑地恢复到原来的样子。
+
+- **redo log:** 是物理日志，记录的是数据页的物理变化，undo log 不是 redo log 的逆过程。

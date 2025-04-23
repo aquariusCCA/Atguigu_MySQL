@@ -41,7 +41,7 @@ mysql>show variables like '%innodb_page_size%';
 行（Row） → 頁（Page） → 區（Extent） → 段（Segment） → 表空間（Tablespace）
 ```
 
-### 行（Row
+### 行（Row）
 - 資料表中的一筆紀錄。
 - 比如：`INSERT INTO user (id, name) VALUES (1, '小明');`
 
