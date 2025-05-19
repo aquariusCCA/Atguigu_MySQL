@@ -10,7 +10,7 @@
 
 ### 步骤1：停止MySQL服务
 
-在卸载之前，先停止MySQL8.0的服务。按键盘上的“Ctrl + Alt + Delete”组合键，打开“任务管理器”对话框，可以在“服务”列表找到“MySQL8.0”的服务，如果现在“正在运行”状态，可以右键单击服务，选择“停止”选项停止MySQL8.0的服务，如图所示。
+在卸载之前，先停止MySQL8.0的服务。按键盘上的 **Ctrl + Alt + Delete** 组合键，打开 **任务管理器** 对话框，可以在 **服务** 列表找到 **MySQL8.0** 的服务，如果现在 **正在运行** 状态，可以右键单击服务，选择 **停止** 选项停止MySQL8.0的服务，如图所示。
 
 ![image-20211014153604802](images/image-20211014153604802.png)
 
@@ -18,7 +18,7 @@
 
 **方式1：通过控制面板方式**
 
-卸载MySQL8.0的程序可以和其他桌面应用程序一样直接在“控制面板”选择“卸载程序”，并在程序列表中找到MySQL8.0服务器程序，直接双击卸载即可，如图所示。这种方式删除，数据目录下的数据不会跟着删除。
+卸载MySQL8.0的程序可以和其他桌面应用程序一样直接在 **控制面板** 选择 **卸载程序**，并在程序列表中找到 MySQL8.0 服务器程序，直接双击卸载即可，如图所示。这种方式删除，数据目录下的数据不会跟着删除。
 
 ![image-20211014153657668](images/image-20211014153657668.png)
 
@@ -34,7 +34,7 @@
 
 ② 选择要卸载的MySQL服务器程序，单击“Remove”（移除），即可进行卸载。
 
-![image-20211014153722683](images/image-20211014153722683.png)
+![image-20211014153722683](images/.image-20211014153722683png)
 
 ③ 单击“Next”（下一步）按钮，确认卸载。
 
@@ -156,27 +156,27 @@ MySQL下载完成后，找到下载文件，双击进行安装，具体操作步
 
 步骤1：双击下载的mysql-installer-community-8.0.26.0.msi文件，打开安装向导。
 
-步骤2：打开“Choosing a Setup Type”（选择安装类型）窗口，在其中列出了5种安装类型，分别是Developer Default（默认安装类型）、Server only（仅作为服务器）、Client only（仅作为客户端）、Full（完全安装）、Custom（自定义安装）。这里选择“Custom（自定义安装）”类型按钮，单击“Next(下一步)”按钮。
+步骤2：打开「Choosing a Setup Type（选择安装类型）」窗口，在其中列出了5种安装类型，分别是Developer Default（默认安装类型）、Server only（仅作为服务器）、Client only（仅作为客户端）、Full（完全安装）、Custom（自定义安装）。这里选择“Custom（自定义安装）”类型按钮，单击“Next(下一步)”按钮。
 
 <img src="images/image-20211014170553535.png" alt="image-20211014170553535" style="zoom:90%;" />
 
-步骤3：打开“Select Products” （选择产品）窗口，可以定制需要安装的产品清单。例如，选择“MySQL Server 8.0.26-X64”后，单击“→”添加按钮，即可选择安装MySQL服务器，如图所示。采用通用的方法，可以添加其他你需要安装的产品。
+步骤3：打开「Select Products（选择产品）」窗口，可以定制需要安装的产品清单。例如，选择「MySQL Server 8.0.26-X64」后，单击「→」添加按钮，即可选择安装MySQL服务器，如图所示。采用通用的方法，可以添加其他你需要安装的产品。
 
 <img src="images/image-20211014170638699.png" alt="image-20211014170638699" style="zoom:80%;" />
 
-此时如果直接“Next”（下一步），则产品的安装路径是默认的。如果想要自定义安装目录，则可以选中对应的产品，然后在下面会出现“Advanced Options”（高级选项）的超链接。
+此时如果直接「Next（下一步）」，则产品的安装路径是默认的。如果想要自定义安装目录，则可以选中对应的产品，然后在下面会出现「Advanced Options（高级选项）」的超链接。
 
 <img src="images/image-20211014170814386.png" alt="image-20211014170814386" style="zoom:80%;" />
 
-单击“Advanced Options”（高级选项）则会弹出安装目录的选择窗口，如图所示，此时你可以分别设置MySQL的服务程序安装目录和数据存储目录。如果不设置，默认分别在C盘的Program Files目录和ProgramData目录（这是一个隐藏目录）。如果自定义安装目录，请避免“中文”目录。另外，建议服务目录和数据目录分开存放。
+单击「Advanced Options（高级选项）」则会弹出安装目录的选择窗口，如图所示，此时你可以分别设置MySQL的服务程序安装目录和数据存储目录。如果不设置，默认分别在C盘的Program Files目录和ProgramData目录（这是一个隐藏目录）。如果自定义安装目录，请避免“中文”目录。另外，建议服务目录和数据目录分开存放。
 
 <img src="images/image-20211014170857263.png" alt="image-20211014170857263" style="zoom:80%;" />
 
-步骤4：在上一步选择好要安装的产品之后，单击“Next”（下一步）进入确认窗口，如图所示。单击“Execute”（执行）按钮开始安装。
+步骤4：在上一步选择好要安装的产品之后，单击「Next（下一步）」进入确认窗口，如图所示。单击「Execute（执行）」按钮开始安装。
 
 <img src="images/image-20211014170934889.png" alt="image-20211014170934889" style="zoom:90%;" />
 
-步骤5：安装完成后在“Status”（状态）列表下将显示“Complete”（安装完成），如图所示。
+步骤5：安装完成后在「Status（状态）」列表下将显示「Complete（安装完成）」，如图所示。
 
 <img src="images/image-20211014171002259.png" alt="image-20211014171002259" style="zoom:90%;" />
 
@@ -184,15 +184,15 @@ MySQL下载完成后，找到下载文件，双击进行安装，具体操作步
 
 MySQL安装之后，需要对服务器进行配置。具体的配置步骤如下。
 
-步骤1：在上一个小节的最后一步，单击“Next”（下一步）按钮，就可以进入产品配置窗口。
+步骤1：在上一个小节的最后一步，单击「Next（下一步）」按钮，就可以进入产品配置窗口。
 
 <img src="images/clip_image002-1634203188594.jpg" alt="img" style="zoom:80%;" />
 
-步骤2：单击“Next”（下一步）按钮，进入MySQL服务器类型配置窗口，如图所示。端口号一般选择默认端口号3306。
+步骤2：单击「Next（下一步）」按钮，进入MySQL服务器类型配置窗口，如图所示。端口号一般选择默认端口号3306。
 
 <img src="images/clip_image004-1634203188595.jpg" alt="img" style="zoom:80%;" />
 
-其中，“Config Type”选项用于设置服务器的类型。单击该选项右侧的下三角按钮，即可查看3个选项，如图所示。
+其中，「Config Type」选项用于设置服务器的类型。单击该选项右侧的下三角按钮，即可查看3个选项，如图所示。
 
 <img src="images/clip_image006-1634203188595.jpg" alt="img" style="zoom:80%;" />
 
@@ -202,29 +202,29 @@ MySQL安装之后，需要对服务器进行配置。具体的配置步骤如下
 
 - `Dedicated Machine（专用服务器）`：该选项代表只运行MySQL服务的服务器。MySQL服务器配置成使用所有可用系统资源。
 
-步骤3：单击“Next”（下一步）按钮，打开设置授权方式窗口。其中，上面的选项是MySQL8.0提供的新的授权方式，采用SHA256基础的密码加密方法；下面的选项是传统授权方法（保留5.x版本兼容性）。
+步骤3：单击「Next（下一步）」按钮，打开设置授权方式窗口。其中，上面的选项是MySQL8.0提供的新的授权方式，采用SHA256基础的密码加密方法；下面的选项是传统授权方法（保留5.x版本兼容性）。
 
 <img src="images/clip_image008-1634203188595.jpg" alt="img" style="zoom:80%;" />
 
-步骤4：单击“Next”（下一步）按钮，打开设置服务器root超级管理员的密码窗口，如图所示，需要输入两次同样的登录密码。也可以通过“Add User”添加其他用户，添加其他用户时，需要指定用户名、允许该用户名在哪台/哪些主机上登录，还可以指定用户角色等。此处暂不添加用户，用户管理在MySQL高级特性篇中讲解。
+步骤4：单击「Next（下一步）」按钮，打开设置服务器root超级管理员的密码窗口，如图所示，需要输入两次同样的登录密码。也可以通过「Add User」添加其他用户，添加其他用户时，需要指定用户名、允许该用户名在哪台/哪些主机上登录，还可以指定用户角色等。此处暂不添加用户，用户管理在MySQL高级特性篇中讲解。
 
 <img src="images/clip_image010-1634203188595.jpg" alt="img" style="zoom:80%;" />
 
-步骤5：单击“Next”（下一步）按钮，打开设置服务器名称窗口，如图所示。该服务名会出现在Windows服务列表中，也可以在命令行窗口中使用该服务名进行启动和停止服务。本书将服务名设置为“MySQL80”。如果希望开机自启动服务，也可以勾选“Start the MySQL Server at System Startup”选项（推荐）。
+步骤5：单击「Next（下一步）」按钮，打开设置服务器名称窗口，如图所示。该服务名会出现在Windows服务列表中，也可以在命令行窗口中使用该服务名进行启动和停止服务。本书将服务名设置为「MySQL80」。如果希望开机自启动服务，也可以勾选「Start the MySQL Server at System Startup」选项（推荐）。
 
-下面是选择以什么方式运行服务？可以选择“Standard System Account”(标准系统用户)或者“Custom User”(自定义用户)中的一个。这里推荐前者。
+下面是选择以什么方式运行服务？可以选择「Standard System Account (标准系统用户)」或者「Custom User(自定义用户)」中的一个。这里推荐前者。
 
 <img src="images/clip_image012-1634203188596.jpg" alt="img" style="zoom:80%;" />
 
-步骤6：单击“Next”（下一步）按钮，打开确认设置服务器窗口，单击“Execute”（执行）按钮。
+步骤6：单击「Next（下一步）」按钮，打开确认设置服务器窗口，单击「Execute（执行）」按钮。
 
 <img src="images/clip_image014-1634203188596.jpg" alt="img" style="zoom:80%;" />
 
-步骤7：完成配置，如图所示。单击“Finish”（完成）按钮，即可完成服务器的配置。
+步骤7：完成配置，如图所示。单击「Finish（完成）」按钮，即可完成服务器的配置。
 
 <img src="images/clip_image016.jpg" alt="img" style="zoom:80%;" />
 
-步骤8：如果还有其他产品需要配置，可以选择其他产品，然后继续配置。如果没有，直接选择“Next”（下一步），直接完成整个安装和配置过程。
+步骤8：如果还有其他产品需要配置，可以选择其他产品，然后继续配置。如果没有，直接选择「Next（下一步）」，直接完成整个安装和配置过程。
 
 <img src="images/clip_image018.jpg" alt="img" style="zoom:80%;" />
 
@@ -237,10 +237,16 @@ MySQL安装之后，需要对服务器进行配置。具体的配置步骤如下
 如果不配置MySQL环境变量，就不能在命令行直接输入MySQL登录命令。下面说如何配置MySQL的环境变量：
 
 步骤1：在桌面上右击【此电脑】图标，在弹出的快捷菜单中选择【属性】菜单命令。
+
 步骤2：打开【系统】窗口，单击【高级系统设置】链接。
+
 步骤3：打开【系统属性】对话框，选择【高级】选项卡，然后单击【环境变量】按钮。
+
 步骤4：打开【环境变量】对话框，在系统变量列表中选择path变量。
-步骤5：单击【编辑】按钮，在【编辑环境变量】对话框中，将MySQL应用程序的bin目录（C:\Program Files\MySQL\MySQL Server 8.0\bin）添加到变量值中，用分号将其与其他路径分隔开。
+
+步骤5：单击【编辑】按钮，在【编辑环境变量】对话框中，将MySQL应用程序的bin目录（C:\Program Files\MySQL\MySQL Server 8.0\bin）添
+加到变量值中，用分号将其与其他路径分隔开。
+
 步骤6：添加完成之后，单击【确定】按钮，这样就完成了配置path变量的操作，然后就可以直接输入MySQL命令来登录数据库了。
 
 ### 2.6 MySQL5.7 版本的安装、配置
@@ -251,7 +257,7 @@ MySQL安装之后，需要对服务器进行配置。具体的配置步骤如下
 
 - **配置**
 
-配置环节与MySQL8.0版本确有细微不同。大部分情况下直接选择“Next”即可，不影响整理使用。
+配置环节与MySQL8.0版本确有细微不同。大部分情况下直接选择「Next」即可，不影响整理使用。
 
 这里配置MySQL5.7时，重点强调：**与前面安装好的MySQL8.0不能使用相同的端口号。**
 
@@ -261,13 +267,13 @@ MySQL的安装和配置是一件非常简单的事，但是在操作过程中也
 
 **问题1：无法打开MySQL8.0软件安装包或者安装过程中失败，如何解决？**
 
-在运行MySQL8.0软件安装包之前，用户需要确保系统中已经安装了.Net Framework相关软件，如果缺少此软件，将不能正常地安装MySQL8.0软件。
+在运行 MySQL8.0 软件安装包之前，用户需要确保系统中已经安装了 `.Net Framework` 相关软件，如果缺少此软件，将不能正常地安装 MySQL8.0软件。
 
 <img src="images/clip_image002.gif" alt="img" style="zoom:80%;" />
 
 解决方案：到这个地址https://www.microsoft.com/en-us/download/details.aspx?id=42642下载Microsoft .NET Framework 4.5并安装后，再去安装MySQL。
 
-另外，还要确保Windows Installer正常安装。windows上安装mysql8.0需要操作系统提前已安装好Microsoft Visual C++ 2015-2019。
+另外，还要确保 Windows Installer 正常安装。windows 上安装 mysql8.0 需要操作系统提前已安装好 Microsoft Visual C++ 2015-2019。
 
 <img src="images/clip_image004.gif" alt="img" style="zoom:75%;" />
 
@@ -279,11 +285,11 @@ MySQL的安装和配置是一件非常简单的事，但是在操作过程中也
 
 该问题通常是因为MySQL卸载时，没有完全清除相关信息导致的。
 
-解决办法是，把以前的安装目录删除。如果之前安装并未单独指定过服务安装目录，则默认安装目录是“C:\Program Files\MySQL”，彻底删除该目录。同时删除MySQL的Data目录，如果之前安装并未单独指定过数据目录，则默认安装目录是“C:\ProgramData\MySQL”，该目录一般为隐藏目录。删除后，重新安装即可。
+解决办法是，把以前的安装目录删除。如果之前安装并未单独指定过服务安装目录，则默认安装目录是 `C:\Program Files\MySQL`，彻底删除该目录。同时删除MySQL的Data目录，如果之前安装并未单独指定过数据目录，则默认安装目录是“C:\ProgramData\MySQL”，该目录一般为隐藏目录。删除后，重新安装即可。
 
 **问题3：如何在Windows系统删除之前的未卸载干净的MySQL服务列表？**
 
-操作方法如下，在系统“搜索框”中输入“cmd”，按“Enter”（回车）键确认，弹出命令提示符界面。然后输入“sc delete MySQL服务名”,按“Enter”（回车）键，就能彻底删除残余的MySQL服务了。
+操作方法如下，在系统「搜索框」中输入「cmd」，按「Enter」（回车）键确认，弹出命令提示符界面。然后输入「sc delete MySQL服务名」，按「Enter（回车）键」，就能彻底删除残余的MySQL服务了。
 
 ## 3. MySQL的登录
 
@@ -296,11 +302,11 @@ MySQL安装完毕之后，需要启动服务器进程，不然客户端无法连
 #### 方式1：使用图形界面工具
 
 * 步骤1：打开windows服务
-
   * 方式1：计算机（点击鼠标右键）→ 管理（点击）→ 服务和应用程序（点击）→ 服务（点击）
   * 方式2：控制面板（点击）→ 系统和安全（点击）→ 管理工具（点击）→ 服务（点击）
   * 方式3：任务栏（点击鼠标右键）→ 启动任务管理器（点击）→ 服务（点击）
-  * 方式4：单击【开始】菜单，在搜索框中输入“services.msc”，按Enter键确认 
+  * 方式4：单击【开始】菜单，在搜索框中输入「services.msc」，按 Enter 键确认 
+
 * 步骤2：找到MySQL80（点击鼠标右键）→ 启动或停止（点击）
 
 ![image-20211014183908375](images/image-20211014183908375.png)
@@ -697,13 +703,13 @@ DBeaver是一个通用的数据库管理工具和 SQL 客户端，支持所有�
 
 ### 可能出现连接问题：
 
-有些图形界面工具，特别是旧版本的图形界面工具，在连接MySQL8时出现“Authentication plugin 'caching_sha2_password' cannot be loaded”错误。
+有些图形界面工具，特别是旧版本的图形界面工具，在连接 MySQL8 时出现「Authentication plugin 'caching_sha2_password' cannot be loaded」错误。
 
 <img src="images/image-20211019215249254.png" alt="image-20211019215249254" style="zoom:80%;" />
 
-出现这个原因是MySQL8之前的版本中加密规则是mysql_native_password，而在MySQL8之后，加密规则是caching_sha2_password。解决问题方法有两种，第一种是升级图形界面工具版本，第二种是把MySQL8用户登录密码加密规则还原成mysql_native_password。
+出现这个原因是MySQL8之前的版本中加密规则是 mysql_native_password，而在MySQL8之后，加密规则是 caching_sha2_password。解决问题方法有两种，第一种是升级图形界面工具版本，第二种是把 MySQL8用户登录密码加密规则还原成 mysql_native_password。
 
-第二种解决方案如下，用命令行登录MySQL数据库之后，执行如下命令修改用户密码加密规则并更新用户密码，这里修改用户名为“root@localhost”的用户密码规则为“mysql_native_password”，密码值为“123456”，如图所示。
+第二种解决方案如下，用命令行登录MySQL数据库之后，执行如下命令修改用户密码加密规则并更新用户密码，这里修改用户名为「root@localhost」的用户密码规则为「mysql_native_password」，密码值为「123456」，如图所示。
 
 ```mysql
 #使用mysql数据库
@@ -734,7 +740,7 @@ FLUSH PRIVILEGES;
 
 ### 6.2 MySQL 源代码获取
 
-首先，你要进入 MySQL下载界面。 这里你不要选择用默认的“Microsoft Windows”，而是要通过下拉栏，找到“Source Code”，在下面的操作系统版本里面， 选择 Windows（Architecture Independent），然后点击下载。 
+首先，你要进入 MySQL下载界面。 这里你不要选择用默认的「Microsoft Windows」，而是要通过下拉栏，找到「Source Code」，在下面的操作系统版本里面， 选择 Windows（Architecture Independent），然后点击下载。 
 
 接下来，把下载下来的压缩文件解压，我们就得到了 MySQL 的源代码。
 
@@ -776,9 +782,9 @@ mysqld --defaults-file="D:\ProgramFiles\mysql\MySQLServer5.7Data\my.ini" --skip-
 7: 再次通过服务管理，打开mysql服务。
 8: 即可用修改后的新密码登陆。
 
-### 问题2：mysql命令报“不是内部或外部命令”
+### 问题2：mysql命令报「不是内部或外部命令」
 
-如果输入mysql命令报“不是内部或外部命令”，把mysql安装目录的bin目录配置到环境变量path中。如下：
+如果输入 mysql 命令报 「不是内部或外部命令」，把 mysql 安装目录的bin目录配置到环境变量path中。如下：
 
 ![image-20210914093150145](images/image-20210914093150145.png)
 
@@ -786,12 +792,12 @@ mysqld --defaults-file="D:\ProgramFiles\mysql\MySQLServer5.7Data\my.ini" --skip-
 
 | ERROR 1046 (3D000): No database selected                     |
 | ------------------------------------------------------------ |
-| 解决方案一：就是使用“USE 数据库名;”语句，这样接下来的语句就默认针对这个数据库进行操作 |
-| 解决方案二：就是所有的表对象前面都加上“数据库.”              |
+| 解决方案一：就是使用「USE 数据库名;」语句，这样接下来的语句就默认针对这个数据库进行操作 |
+| 解决方案二：就是所有的表对象前面都加上「数据库.」              |
 
 ### 问题4：命令行客户端的字符集问题
 
-```mysql
+```shell
 mysql> INSERT INTO t_stu VALUES(1,'张三','男');
 ERROR 1366 (HY000): Incorrect string value: '\xD5\xC5\xC8\xFD' for column 'sname' at row 1
 ```
